@@ -16,21 +16,34 @@ class NodeSerial():
 
         #Teensy ID's in Physical Locations
         self.teensy_ids = [0]*num_nodes
+        self.teensy_ids_bytes = [b'\x00\x00\x00']*num_nodes
 
         # list of serial ports
         self.serial_list = [None]*num_nodes
 
-        # SOM and EOM
+        # SOM (Start Of Message)
+        # EOM (End Of Message)
         # this means that bytes 0xfe and 0xff
         # are OFF LIMITS for any other purpose!
-        self.SOM_list = [b'\xff',b'\xff'] # beginning of every message
-        self.EOM_list = [b'\xfe',b'\xfe'] # ending of every message
+        self.SOM = b'\xff\xff' # beginning of every message
+        self.EOM = b'\xfe\xfe' # ending of every message
+        self.padding_byte = b'\xfd'
+
+        # fixed message length
+        self.message_length = 25
 
         # password sent by node
-        self.password = self.SOM_list + [b'\x04',b'\x00', b'\x00', b'\x01'] + self.EOM_list
+        self.password = b'\xff\xff\x04\x00\x00\x01\xfe\xfe'
+
+        # NOTE on bytes objects
+        # example
+        # byte_sequence = b'\xff\xfe\xfc'
+        # byte_sequence[i] = integer (ie byte_sequence[0] = 255)
+        # byte_sequence[i:i+1] = bytes object (ie byte_sequence[0:1] = b'\xff')
         
         self.baud_rate = 57600
 
+        # register all port before initializing
         self.registerSerialPorts()
 
     def registerSerialPorts(self):
@@ -38,9 +51,10 @@ class NodeSerial():
         # searches serial ports to find attached nodes
         # constructs self.node_addresses and self.serial_list
 
-        prefix = '/dev/ttyACM' # linux serial port prefix, append integer for address
+        #prefix = '/dev/ttyACM' # linux serial port prefix, append integer for address
+        prefix = 'COM' # windows serial port prefix, append integer for address
         port_max = 100 # maximum number of ports to check
-        port_timeout_limit = 10 # wait time in seconds to receive password from Teensy
+        port_timeout_limit = 2 # wait time in seconds to receive password from Teensy
         
         print("Beginning serial port registration")
 
@@ -53,15 +67,15 @@ class NodeSerial():
             print("Looking for node " + str(node) + "/" + str(self.num_nodes))
 
             # try to open serial ports until a node is found
-            device_found = False
-            while device_found == False and port_number < port_max:
+            teensy_found = False
+            while teensy_found == False and port_number < port_max:
 
                 try:
                     # try to open port
                     # the try block will exit after this line if a serial device is not found
                     ser = serial.Serial(prefix + str(port_number), self.baud_rate)
 
-                    print("Serial device found on " + prefix + str(port_number))
+                    print("Serial device found on " + prefix + str(port_number) + ": ", end = '')
                     
                     # if this is a node, it will be continuously sending a password until it receives a password back
                     # so we check the serial port to see if we get the password sequence
@@ -73,26 +87,26 @@ class NodeSerial():
                         if ser.inWaiting() > 0:
                             # check if it matches the current byte in password sequence
                             incoming_byte = ser.read()
-                            if incoming_byte == self.password[password_index]:
+                            if incoming_byte == self.password[password_index:password_index+1]:
                                 # if so, we increase index to check for next byte on next loop
                                 password_index += 1
                             else:
                                 # else, start looking from beginning
                                 password_index = 0
-                                print("here")
 
                         if password_index == len(self.password):
-                            print("got password")
+                            print("Teensy detected")
                             # we have received the password!! This is a node!
                             password_received = True
-                            device_found = True
+                            teensy_found = True
                             last_address_found = prefix + str(port_number)
                             last_port_found = ser
 
                         if time.time() - start_time > port_timeout_limit:
                             # we have waited long enough, it is (probably) not a node
+                            print("Not a Teensy (timed out)")
                             timeout = True
-                    print(password_index)
+                            ser.close()
                                    
                     
                 except SerialException:
@@ -102,18 +116,29 @@ class NodeSerial():
 
                 port_number += 1
 
-            if device_found == True:
+            if teensy_found == True:
 
                 # if we found a device, register it with system
                 self.node_addresses[node] = last_address_found
                 self.serial_list[node] = last_port_found
 
                 # send password back to Teensy
-                for b in self.password:
-                    self.serial_list[node].write(b)
+                self.serial_list[node].write(self.password)
 
                 # ditch extra password bytes in buffer, we don't need them anymore
                 self.serial_list[node].reset_input_buffer()
+
+                # wait for Teensy to send back Teensy ID
+                time.sleep(1)
+
+                if (self.serial_list[node].inWaiting()>2):
+                    tid1 = self.serial_list[node].read()
+                    tid2 = self.serial_list[node].read()
+                    tid3 = self.serial_list[node].read()
+                    self.teensy_ids_bytes[node] = tid1+tid2+tid3
+                    self.teensy_ids[node] = ((tid1[0] << 16) | (tid2[0] << 8)) | tid3[0]
+
+                    
 
                 num_registered_nodes =+ 1
             else:
@@ -123,7 +148,7 @@ class NodeSerial():
         # print out info for registered nodes
         print(str(num_registered_nodes) + " out of " + str(self.num_nodes) + " nodes found ")
         for node in range(num_registered_nodes):
-            print("Node " + str(node) + "- Address: " + self.node_addresses[node])
+            print("Node: " + str(node) + " - Address: " + self.node_addresses[node] + " - ID: " + str(self.teensy_ids[node]))
         
 
     def waitUntilSerialPortsOpen(self):
@@ -150,140 +175,115 @@ class NodeSerial():
 
     def checkIncomingMessageFromNode(self, node_number):
 
-        #Check if port has minimum message length in buffer
-        if self.serial_list[node_number].inWaiting() >= 11:
+        #Serial port for Target Node
+        ser = self.serial_list[node_number]
 
-            #Serial port for Target Node
-            ser = self.serial_list[node_number]
+        #Check if port has minimum message length in buffer
+        if ser.inWaiting() > 6: # at lseat enough bytes for SOM, ID, length, code
 
             #Check for Start of Message
-            for i in range(len(self.SOM_list)):
+            for i in range(len(self.SOM)):
                 current_SOM = ser.read()
-                if current_SOM != self.SOM_list[i]:
+                if current_SOM != self.SOM[i:i+1]:
+                    # Fail: SOM byte missing
+                    # CheckIncomingMessageFromNode fails, stop reading serial port
                     print("SOM Not Found")
                     print(current_SOM)
-                    return "error", "none"
+                    return "error", "SOM missing"
 
             #Teensy IDs, TODO: Use these for validation
             t1 = ser.read()
             t2 = ser.read()
             t3 = ser.read()
-
             # received_tid = ((t1 << 16) | (t2 << 8)) | t3
-            #Read in Length and Code
-            message_length = ser.read()
+            
+            # Read in Length and Code
+            #data_length = int.from_bytes(ser.read(), byteorder = 'big')
+            data_length = ser.read()[0] # taking first element of one-element bytes object changes the byte to int
             message_code = ser.read()
 
-            #Find amount of bytes to read and store into data list
-            num_bytes_to_receive = int.from_bytes(message_length, byteorder='big') - 8 - len(self.EOM_list);
+            # read data
             incoming_data = []
 
-            if num_bytes_to_receive == 0:
-                for i in range(len(self.EOM_list)):
+            if ser.inWaiting() > data_length + 1: # at least enough bytes for data and EOM
+
+                # read in data bytes (could be no bytes)
+                for i in range(data_length):
+                    incoming_data.append(ser.read())
+
+                #Check for End of Message
+                for i in range(len(self.EOM)):
                     current_EOM = ser.read()
-                    if current_EOM != self.EOM_list[i]:
-                        print("EOM Not Found")
-                        ser.flushInput()
-                        return "error", "none"
+                    if current_EOM != self.EOM[i:i+1]:
+                        # Fail: EOM byte missing
+                        # stop reading serial port, all read bytes are unused (aka discarded)
+                        return "error", "EOM missing"
+                # if we get here, we have found EOM and therefore whole message
+                
 
-                return message_code, []
-
-            else:
-
-                if ser.inWaiting() >= num_bytes_to_receive:
-                    for i in range(num_bytes_to_receive):
-                        incoming_data.append(ser.read())
-
-            #Check for End of Message
-                for i in range(len(self.EOM_list)):
-                    current_EOM = ser.read()
-                    if current_EOM != self.EOM_list[i]:
-                        print("EOM Not Found")
-                        ser.flushInput()
-                        return "error", "none"
-
-            #Returns identifier byte for message code and relevant data list
+                # Success: return message
+                # Returns identifier byte for message code and relevant data list
                 return message_code, incoming_data
+            else:
+                return "error", "not enough data bytes"
 
 
         else:
 
-            return "none", "none"
+            return "error", "not enough bytes before data"
 
     def sendMessage(self, outgoing_message_code, outgoing_data, node_number):
-            # input:
-            # outgoing_message_code: bytes object of length 1
-            # outgoing_data: list of ints (can be empty), ASSUMES EACH ITEM CAN BE TRANSFORMED INTO ONE SINGLE BYTE EACH
-            # node_number: int
+        # input:
+        # outgoing_message_code: bytes object of length 1
+        # outgoing_data: list of ints (can be empty), ASSUMES EACH ITEM CAN BE TRANSFORMED INTO ONE SINGLE BYTE EACH
+        # node_number: int
 
-            # first determine number of bytes to send
-        messageLength = (len(self.SOM_list) # SOM
-                      + 3 # teensy id
-                      + 1 # length byte
-                      + len(outgoing_message_code) # code
-                      + len(outgoing_data) # outgoing data bytes
-                      + len(self.EOM_list)) # EOM
+        data_length = len(outgoing_data) # outgoing data bytes
 
-            # select serial port
+        # select serial port
         ser = self.serial_list[node_number]
 
-        # send SOM (3 bytes)
-        for SOM in self.SOM_list:
-            ser.write(SOM)
+        # the bytes object the we will construct and send to the serial port
+        message = (self.SOM # 2 bytes
+                   + self.teensy_ids_bytes[node_number] # 3 bytes
+                   + bytes([data_length]) # 1 byte
+                   + outgoing_message_code # 1 byte
+                   + bytes(outgoing_data) # len(outgoing_data) bytes
+                   + self.EOM) # 2 bytes
 
-        # send teensy id (3 bytes)
-        TID_list = list(self.teensy_ids[node_number].to_bytes(3, byteorder='big'))
-        for TID in TID_list:
-            ser.write(bytes([TID]))
+        ser.write(message)
 
-        # send length (1 byte)
-        ser.write(bytes([messageLength]))
-
-        # send code (1 bytes)
-        ser.write(outgoing_message_code)
-
-        # send data
-        for OUT in outgoing_data:
-            ser.write(bytes([OUT]))
-
-        # send EOM (3 bytes)
-        for EOM in self.EOM_list:
-            ser.write(EOM)
-
-        #Print All Bytes
-
-        # print(self.SOM_list, end=" [")
-        # for tid in TID_list:
-        #     print(bytes([tid]), end=", ")
-        # print("] [", end="")
-        # print(bytes([messageLength]), end="")
-        # print("] [", end="")
-        # print(outgoing_message_code, end="")
-        # print("] [", end="")
-        # for out in outgoing_data:
-        #     print(bytes([out]), end=", ")
-        # print("]", end="")
-        # print(self.EOM_list)
-        # print(int.from_bytes(TID_list, byteorder='big'))
-        # print("\n")
-
-        print("Sending to " + str(self.node_addresses[node_number]) + " " + str(outgoing_message_code) + " " + str(outgoing_data))
+        print("Sending message to node " + str(node_number) + " - Code: " + str(outgoing_message_code) + ", Data: " + str(outgoing_data))
 
 if __name__ == '__main__':
 
     num_nodes = 1
 
+    # test message
+    TEST_LED_PIN_AND_RESPOND = b'\x00'
+    num_blinks = 10
+
     S = NodeSerial(num_nodes)
+
+    S.sendMessage(TEST_LED_PIN_AND_RESPOND, [num_blinks], 0)
+
+    code, data = S.checkIncomingMessageFromNode(0)
+    print("Message received from node 0 - Code: " + str(code) + ", Data: " + str(data))
+    
 
     while True:
         try:
-            pass
+
+            # just some code to fill in this gap (this will be where main program code goes
+            # for some reason if it is empty the KeyboardInterrupt doesn't get caught below
+            for i in range(100):
+                filler = 0
         except KeyboardInterrupt:
             print("Closing Main Program and Serial Ports")
 
             for i in range(len(S.serial_list)):
-                print ("Stopping" + str(S.node_addresses[i]))
+                print ("Stopping port: " + str(S.node_addresses[i]))
                 S.serial_list[i].close()
 
-            print("Completed")
+            print("Completed, Goodbye!")
             break
