@@ -51,8 +51,8 @@ class NodeSerial():
         # searches serial ports to find attached nodes
         # constructs self.node_addresses and self.serial_list
 
-        #prefix = '/dev/ttyACM' # linux serial port prefix, append integer for address
-        prefix = 'COM' # windows serial port prefix, append integer for address
+        prefix = '/dev/ttyACM' # linux serial port prefix, append integer for address
+        #prefix = 'COM' # windows serial port prefix, append integer for address
         port_max = 100 # maximum number of ports to check
         port_timeout_limit = 2 # wait time in seconds to receive password from Teensy
         
