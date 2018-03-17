@@ -11,8 +11,6 @@ long int my_id;
 
 NodeSerial serial_comm;
 
-
-
 void setup() {
 
   read_teensyID();

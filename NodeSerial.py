@@ -1,5 +1,8 @@
-#Serial Communication to Node Libraryr
-#Handles messages being sent between Raspberry Pi and Node
+# NodeSerial.py - LASG/PBAI
+# Created by Kevin Lam
+# Updated by Adam Francey March 16 2018
+# Handles serial connection and communication between Raspberry Pi and Node
+
 import serial
 from serial import SerialException
 import time
@@ -143,7 +146,7 @@ class NodeSerial():
                 num_registered_nodes =+ 1
             else:
                 # otherwise, we have hit port max
-                print("Port maximum (" + str(port_max) + ") reached: " + str(port_number<port_max))
+                print("Port maximum (" + str(port_max) + ") reached: " + str(port_number>=port_max))
 
         # print out info for registered nodes
         print(str(num_registered_nodes) + " out of " + str(self.num_nodes) + " nodes found ")
@@ -152,6 +155,7 @@ class NodeSerial():
         
 
     def waitUntilSerialPortsOpen(self):
+        # DEPRECATED ---------------------------------------------------------------
         # only continue once we are able to open all serial ports
         print("Attempting to open serial ports...")
         while True:
@@ -168,12 +172,15 @@ class NodeSerial():
         print("Serial Ports Opened Sucessfully")
 
     def rearrangeSerialPorts(self):
-
+        # NEEDS TO BE UPDATED -------------------------------------------------------------
         for i in range(len(self.serial_list)):
             sendMessage(INSTRUCT_CODE_GET_TEENSY_ID)
             code, tid = checkIncomingMessageFromNode(i)
 
     def checkIncomingMessageFromNode(self, node_number):
+
+        # the raw bytes coming from serial port
+        raw_bytes = b''
 
         #Serial port for Target Node
         ser = self.serial_list[node_number]
@@ -184,23 +191,28 @@ class NodeSerial():
             #Check for Start of Message
             for i in range(len(self.SOM)):
                 current_SOM = ser.read()
+                raw_bytes += current_SOM
                 if current_SOM != self.SOM[i:i+1]:
                     # Fail: SOM byte missing
                     # CheckIncomingMessageFromNode fails, stop reading serial port
                     print("SOM Not Found")
                     print(current_SOM)
-                    return "error", "SOM missing"
+                    return "error", "SOM missing", None, None
 
             #Teensy IDs, TODO: Use these for validation
             t1 = ser.read()
             t2 = ser.read()
             t3 = ser.read()
-            # received_tid = ((t1 << 16) | (t2 << 8)) | t3
+            raw_bytes = raw_bytes + t1 + t2 + t3
+            received_tid = ((t1[0] << 16) | (t2[0] << 8)) | t3[0]
             
             # Read in Length and Code
             #data_length = int.from_bytes(ser.read(), byteorder = 'big')
-            data_length = ser.read()[0] # taking first element of one-element bytes object changes the byte to int
+            data_length = ser.read()
+            raw_bytes += data_length
+            data_length = data_length[0] # taking first element of one-element bytes object changes the byte to int
             message_code = ser.read()
+            raw_bytes += message_code
 
             # read data
             incoming_data = []
@@ -209,28 +221,32 @@ class NodeSerial():
 
                 # read in data bytes (could be no bytes)
                 for i in range(data_length):
-                    incoming_data.append(ser.read())
+                    data_byte = ser.read()
+                    incoming_data.append(data_byte)
+                    raw_bytes += data_byte
 
                 #Check for End of Message
                 for i in range(len(self.EOM)):
                     current_EOM = ser.read()
+                    raw_bytes += current_EOM
                     if current_EOM != self.EOM[i:i+1]:
                         # Fail: EOM byte missing
                         # stop reading serial port, all read bytes are unused (aka discarded)
-                        return "error", "EOM missing"
+                        return "error", "EOM missing", None, None
                 # if we get here, we have found EOM and therefore whole message
                 
 
                 # Success: return message
                 # Returns identifier byte for message code and relevant data list
-                return message_code, incoming_data
+                print("Received message from node " + str(node_number) + " - Code: " + str(message_code) + ", Data: " + str(incoming_data))
+                return message_code, incoming_data, received_tid, raw_bytes
             else:
-                return "error", "not enough data bytes"
+                return "error", "not enough data bytes", None, None
 
 
         else:
 
-            return "error", "not enough bytes before data"
+            return "error", "not enough bytes before data", None, None
 
     def sendMessage(self, outgoing_message_code, outgoing_data, node_number):
         # input:
@@ -255,6 +271,17 @@ class NodeSerial():
 
         print("Sending message to node " + str(node_number) + " - Code: " + str(outgoing_message_code) + ", Data: " + str(outgoing_data))
 
+    def getNodeNumberFromId(self, teensy_id):
+        for i in range(len(self.teensy_ids)):
+            if teensy_id == self.teensy_ids[i]:
+                return i
+
+    def close(self):
+        for i in range(self.num_nodes):
+            print ("Stopping port: " + str(self.node_addresses[i]))
+            self.serial_list[i].close()
+        
+
 if __name__ == '__main__':
 
     num_nodes = 1
@@ -267,8 +294,13 @@ if __name__ == '__main__':
 
     S.sendMessage(TEST_LED_PIN_AND_RESPOND, [num_blinks], 0)
 
-    code, data = S.checkIncomingMessageFromNode(0)
+    time.sleep(1) # wait a second for response
+                  # this is not needed on windows
+                  # is needed on Pi
+
+    code, data, tid, raw_bytes = S.checkIncomingMessageFromNode(0)
     print("Message received from node 0 - Code: " + str(code) + ", Data: " + str(data))
+    print("Raw bytes of message: " + str(raw_bytes))
     
 
     while True:
@@ -280,10 +312,7 @@ if __name__ == '__main__':
                 filler = 0
         except KeyboardInterrupt:
             print("Closing Main Program and Serial Ports")
-
-            for i in range(len(S.serial_list)):
-                print ("Stopping port: " + str(S.node_addresses[i]))
-                S.serial_list[i].close()
+            S.close()
 
             print("Completed, Goodbye!")
             break

@@ -80,7 +80,6 @@ void NodeSerial::Register(uint8_t my_id_bytes[]){
   
     if (eligible){
       password_received = true;
-      digitalWrite(13, HIGH);
     }
     initialized = password_received;
   }
@@ -92,6 +91,11 @@ void NodeSerial::Register(uint8_t my_id_bytes[]){
   Serial.write(my_id_bytes[0]);
   Serial.write(my_id_bytes[1]);
   Serial.write(my_id_bytes[2]);
+
+  // let NodeSerial know what the id is
+  ID[0] = my_id_bytes[0];
+  ID[1] = my_id_bytes[1];
+  ID[2] = my_id_bytes[2];
 }
 
 
