@@ -7,16 +7,30 @@
 import NodeSerial # LASG library for reading serial ports
 import PiUDP # LASG library for UDP communication
 from serial import SerialException
+import queue
 
-IP_LAPTOP = '192.168.2.23' #IP address of master laptop
+# instruction codes
+REQUEST_TEENSY_IDS = b'\x01' # send back ids of all connected teensies
+
+# code handlers
+def handle_REQUEST_TEENSY_IDS():
+    SOM = b'\xff\xff'
+    tid = b'\x00\x00\x00' # if teensy ID is \x00\x00\x00 then raspberry pi knows this message is for itself
+    length = bytes([serial_manager.num_nodes*3])
+    REQUEST_TEENSY_IDS = b'\x01'
+    data_bytes = b''
+    for teensy in range(serial_manager.num_nodes):
+        data_bytes += serial_manager.teensy_ids_bytes[teensy]
+    EOM = b'\xfe\xfe'
+    raw_bytes = SOM + tid + length + REQUEST_TEENSY_IDS + data_bytes + EOM
+    UDP_manager.send_bytes(raw_bytes)
+
+IP_LAPTOP = '192.168.2.22' #IP address of master laptop
 PORT_RECEIVE = 4001 # receive input on this port
 PORT_SEND = 4000 # send output on this port
 
-# number of nodes we expect to be connected to this Pi
-num_nodes = 1
-
 # object for managing serial communication to and from each node
-serial_manager = NodeSerial.NodeSerial(num_nodes)
+serial_manager = NodeSerial.NodeSerial()
 
 # object for managing UDP communication to and from master laptop
 UDP_manager = PiUDP.PiUDP(IP_LAPTOP, PORT_RECEIVE, PORT_SEND)
@@ -26,19 +40,38 @@ while True:
 
     try:
 
-        # check nodes for a message
-        for i in range(num_nodes):
+        # check for serial message from nodes
+        for i in range(serial_manager.num_nodes):
             code, data, tid, raw_bytes = serial_manager.checkIncomingMessageFromNode(i)
             if code != 'error':
                 # if we get a message, pass it on to the laptop
                 UDP_manager.send_bytes(raw_bytes)
 
-        # check for waiting message
-        if UDP_manager.bytes_waiting:
-            code, data, tid = UDP_manager.decode_bytes(UDP_manager.data_bytes)
-            node_number = serial_manager.getNodeNumberFromId(tid)
-            serial_manager.sendMessage(code, data, node_number)
-            UDP_manager.bytes_waiting = False
+        # check for UDP message from laptop
+        try:
+            # get a UDP packet from the queue
+            # if the queue is empty it raises queue.Empty exception
+            data_bytes = UDP_manager.data_bytes_queue.get(block = False)
+            code, data, tid = UDP_manager.decode_bytes(data_bytes)
+            if tid == 0:
+                # A teensy ID of 0 indicates that this message is for the Pi itself
+                if code == REQUEST_TEENSY_IDS:
+                    handle_REQUEST_TEENSY_IDS()
+                
+            else:
+                # if the teensy ID is not zero this message is destined for a node
+                # node_number = -1 indicates that the teensy ID in the UDP packet
+                # is not recognized by this pi
+                node_number = serial_manager.getNodeNumberFromId(tid)
+
+                if node_number != -1:
+                    # if the teensy is on this Pi, send the bytes to the
+                    # appropriate node
+                    serial_manager.sendMessage(code, data, node_number)
+                    
+        except queue.Empty:
+            # there are no packets waiting in the queue
+            pass
 
     # catch serial port errors
     except SerialException:

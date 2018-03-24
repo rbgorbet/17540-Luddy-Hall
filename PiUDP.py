@@ -4,16 +4,13 @@
 
 import socket
 import threading
+import queue
 
 class PiUDP():
     def __init__(self, ip_laptop, port_receive, port_send):
 
-        # this changes to True when we receive data
-        # and set to false in main program when we handle it
-        self.bytes_waiting = False
-
-        # received data in bytes
-        self.data_bytes = b''
+        # received data in bytes in queue
+        self.data_bytes_queue = queue.Queue()
 
         # received data as a utf-8 string
         self.data_string = ''
@@ -48,9 +45,13 @@ class PiUDP():
 
     def receive_bytes(self):
         while self.running:
-            self.data_bytes, self.addr = self.sock_receive.recvfrom(1024) # buffer size is 1024 bytes
-            print("Received UDP - Address: " + self.addr[0] + ", Data: " + str(self.data_bytes))
-            self.bytes_waiting = True
+            # recvfrom blocks until it receives a UDP packet
+            data_bytes, self.addr = self.sock_receive.recvfrom(1024) # buffer size is 1024 bytes
+
+            # store the packet in the queue
+            self.data_bytes_queue.put(data_bytes)
+            print("Received UDP - Address: " + self.addr[0] + ", Data: " + str(data_bytes))
+            
 
     def send_string(self, string):
         self.sock_transmit.sendto(bytes(string, 'utf-8'), (self.ip_laptop, self.port_send))

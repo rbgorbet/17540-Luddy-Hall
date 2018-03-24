@@ -9,20 +9,21 @@ import time
 
 class NodeSerial():
 
-    def __init__(self, num_nodes):
+    def __init__(self):
 
         # num_nodes: number of nodes expected to be attached
-        self.num_nodes = num_nodes
+        self.num_nodes = 0
+        self.num_nodes_max = 10
 
         #Initialized Serial Comm Locations, To Be Rearranged Later
-        self.node_addresses = ['']*num_nodes
+        self.node_addresses = ['']*self.num_nodes_max
 
         #Teensy ID's in Physical Locations
-        self.teensy_ids = [0]*num_nodes
-        self.teensy_ids_bytes = [b'\x00\x00\x00']*num_nodes
+        self.teensy_ids = [0]*self.num_nodes_max
+        self.teensy_ids_bytes = [b'\x00\x00\x00']*self.num_nodes_max
 
         # list of serial ports
-        self.serial_list = [None]*num_nodes
+        self.serial_list = [None]*self.num_nodes_max
 
         # SOM (Start Of Message)
         # EOM (End Of Message)
@@ -60,14 +61,15 @@ class NodeSerial():
         port_timeout_limit = 2 # wait time in seconds to receive password from Teensy
         
         print("Beginning serial port registration")
+        print("Looking for a maximum of " + str(self.num_nodes_max) + " nodes")
 
         # find all nodes
         port_number = 0
         last_address_found = ''
         last_port_found = None
         num_registered_nodes = 0
-        for node in range(self.num_nodes):
-            print("Looking for node " + str(node) + "/" + str(self.num_nodes))
+        for node in range(self.num_nodes_max):
+            print("Looking for node " + str(node))
 
             # try to open serial ports until a node is found
             teensy_found = False
@@ -143,15 +145,18 @@ class NodeSerial():
 
                     
 
-                num_registered_nodes =+ 1
+                num_registered_nodes += 1
             else:
-                # otherwise, we have hit port max
+                # otherwise, we have hit port max, stop looking for nodes
                 print("Port maximum (" + str(port_max) + ") reached: " + str(port_number>=port_max))
+                break
 
         # print out info for registered nodes
-        print(str(num_registered_nodes) + " out of " + str(self.num_nodes) + " nodes found ")
+        self.num_nodes = num_registered_nodes
+        print("Serial registration complete: " + str(num_registered_nodes) + " nodes found")
         for node in range(num_registered_nodes):
-            print("Node: " + str(node) + " - Address: " + self.node_addresses[node] + " - ID: " + str(self.teensy_ids[node]))
+            print("Node: " + str(node) + " - Address: " + self.node_addresses[node] +
+                  " - ID: " + str(self.teensy_ids[node]) + " (" + str(self.teensy_ids_bytes[node]) + ")")
         
 
     def waitUntilSerialPortsOpen(self):
@@ -272,9 +277,12 @@ class NodeSerial():
         print("Sending message to node " + str(node_number) + " - Code: " + str(outgoing_message_code) + ", Data: " + str(outgoing_data))
 
     def getNodeNumberFromId(self, teensy_id):
-        for i in range(len(self.teensy_ids)):
+        # returns indexed node number of Teensy
+        # if this Teensy ID doesn't exist, returns -1
+        for i in range(self.num_nodes):
             if teensy_id == self.teensy_ids[i]:
                 return i
+        return -1
 
     def close(self):
         for i in range(self.num_nodes):
@@ -290,7 +298,7 @@ if __name__ == '__main__':
     TEST_LED_PIN_AND_RESPOND = b'\x00'
     num_blinks = 10
 
-    S = NodeSerial(num_nodes)
+    S = NodeSerial()
 
     S.sendMessage(TEST_LED_PIN_AND_RESPOND, [num_blinks], 0)
 
