@@ -1,6 +1,6 @@
 /*
 * NodeSerial.cpp - Library for Communication Protocol between Raspberry Pi and Node
-* created By Adam Francey March 13 5, 2018
+* created By Adam Francey March 13, 2018
 * Modified from usb_serial_comm.cpp created By Adam Francey, Kevin Lam, July 5, 2017
 * Released for Luddy Hall 2018
 * Philip Beesley Architect Inc. / Living Architecture Systems Group

@@ -11,6 +11,14 @@ import threading
 import time
 import queue
 
+#Server
+from pythonosc import dispatcher
+from pythonosc import osc_server
+
+#Client
+from pythonosc import osc_message_builder
+from pythonosc import udp_client
+
 # instruction codes
 TEST_LED_PIN_AND_RESPOND = b'\x00'
 REQUEST_TEENSY_IDS = b'\x01'
@@ -18,7 +26,8 @@ REQUEST_TEENSY_IDS = b'\x01'
 connected_teensies = {} # connected_teensies[pi_addr] = [list of bytes objects, each element is byte sobjects for one teensy]
 received_connected_teensies = {} #received_connected_teensies[pi_addr] = True or False is we received connected Teensies
 
-pi_ip_addresses = ['192.168.2.54', '192.168.2.24']
+#pi_ip_addresses = ['192.168.2.54', '192.168.2.24']
+pi_ip_addresses = ['192.168.2.54']
 
 pi_incoming_bytes_queue = {}
 for pi_addr in pi_ip_addresses:
@@ -26,9 +35,11 @@ for pi_addr in pi_ip_addresses:
     received_connected_teensies[pi_addr] = False
 
 tested_teensies = False
-    
-PORT_RECEIVE = 4000
-PORT_TRANSMIT = 4001
+
+
+# UDP Initialization    
+UDP_PORT_RECEIVE = 4000
+UDP_PORT_TRANSMIT = 4001
 MY_IP ='0.0.0.0'
 
 sock_transmit = socket.socket(socket.AF_INET, # Internet
@@ -36,21 +47,11 @@ sock_transmit = socket.socket(socket.AF_INET, # Internet
 
 sock_receive = socket.socket(socket.AF_INET, # Internet
                      socket.SOCK_DGRAM) # UDP
-sock_receive.bind((MY_IP, PORT_RECEIVE))
-
-
-##def send_string(MESSAGE):
-##    sock_transmit.sendto(bytes(MESSAGE, 'utf-8'), (IP_PI1, PORT_TRANSMIT))
-##
-##
-##def receive_string():
-##    while True:
-##        data, addr = sock_receive.recvfrom(1024) # buffer size is 1024 bytes
-##        print("Received string: " + str(data, 'utf-8'))
+sock_receive.bind((MY_IP, UDP_PORT_RECEIVE))
 
 
 def send_bytes(raw_bytes, ip_addr):
-    sock_transmit.sendto(raw_bytes, (ip_addr, PORT_TRANSMIT))
+    sock_transmit.sendto(raw_bytes, (ip_addr, UDP_PORT_TRANSMIT))
 
 
 def receive_bytes():
@@ -81,7 +82,35 @@ def decode_bytes(raw_bytes):
 
     return code, data, tid
 
+# OSC Initialization
+IP_4D_LAPTOP = '0.0.0.0'
+OSC_packet_queue = queue.Queue()
 
+# Server
+OSC_PORT_RECEIVE = 3001
+def receive_all_OSC(addr):
+    # expect addresses like
+    # /4D/code/data
+    OSC_packet_queue.put(addr)
+    print(addr)
+
+dispatcher = dispatcher.Dispatcher()
+dispatcher.set_default_handler(receive_all_OSC)
+OSC_listener = osc_server.BlockingOSCUDPServer(('0.0.0.0', OSC_PORT_RECEIVE), dispatcher)
+OSC_listener_thread = threading.Thread(target=OSC_listener.serve_forever)
+OSC_listener_thread.start()
+
+# Client
+OSC_PORT_TRANSMIT = 3000
+OSC_client = udp_client.UDPClient(IP_4D_LAPTOP, OSC_PORT_TRANSMIT)
+def send_OSC_to_4D(addr):
+    msg = osc_message_builder.OscMessageBuilder(address = addr)
+    msg = msg.build()
+    OSC_client.send(msg)
+
+
+
+# UDP message handlers
 def request_connected_teensies():
     
 
@@ -118,7 +147,7 @@ def test_connected_teensies():
     # test connected Teensies
     SOM = b'\xff\xff'
     length = b'\x01' # no data
-    data = b'\x05' # blink 5 times
+    data = b'\x05' # blink 20 times
     EOM = b'\xfe\xfe'
     print("Sending TEST_LED_PIN_AND_RESPOND to all connected Teensies")
     for pi in pi_ip_addresses:
@@ -129,6 +158,7 @@ def test_connected_teensies():
     
 
 #main
+debug = False
 listening_thread = threading.Thread(target = receive_bytes)
 listening_thread.start()
 
@@ -141,8 +171,17 @@ request_connected_teensies()
 
 while True:
 
+    # check for OSC message from 4d laptop
+    try:
+        incoming_OSC = OSC_packet_queue.get(block = False)
+        print("Incoming OSC: " + incoming_OSC)
+        if (incoming_OSC == "/4d/test"):
+            test_connected_teensies()
+    except queue.Empty:
+        pass
+
     for pi in pi_ip_addresses:
-        # check for waiting message
+        # check for waiting UDP message from a Pi
         try:
             # try to get a packet from the queue
             # raises queue.Empty exception if no packets waiting in queue
@@ -162,7 +201,7 @@ while True:
         except queue.Empty:
             pass
 
-        if tested_teensies == False:
+        if debug and tested_teensies == False:
             tested_teensies = test_connected_teensies()
 
 

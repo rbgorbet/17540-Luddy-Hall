@@ -20,9 +20,6 @@
 
 #define MAX_DATA_LENGTH 255
 
-// Message codes
-#define TEST_LED_PIN_AND_RESPOND 0x00
-
 class NodeSerial{
 
   public:

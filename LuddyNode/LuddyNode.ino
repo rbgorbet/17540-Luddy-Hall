@@ -2,6 +2,16 @@
 // for auto-registration
 
 #include "NodeSerial.h"
+#include "Behaviours.h"
+
+// Message codes
+#define TEST_LED_PIN_AND_RESPOND 0x00
+#define AUDIO_START_RECORDING 0x02
+#define AUDIO_STOP_RECORDING 0x03
+#define AUDIO_START_PLAYING 0x04
+#define AUDIO_STOP_PLAYING 0x05
+
+int frame_duration = 50; //milliseconds
 
 int led_pin = 13;
 
@@ -10,8 +20,10 @@ uint8_t my_id_bytes[3] = {0x00,0x00,0x00};
 long int my_id;
 
 NodeSerial serial_comm;
+Behaviours behaviours(frame_duration);
 
 void setup() {
+
 
   read_teensyID();
 
@@ -22,30 +34,25 @@ void setup() {
 
 void loop() {
 
+
   // this loops starts running after the node registers
   
   //digitalWrite(led_pin, HIGH);
   
   if (serial_comm.CheckMessage()){ // returns 1 if message found, 0 otherwise
-    //flash_led();
     if (serial_comm.last_code_received_ == TEST_LED_PIN_AND_RESPOND){
       uint8_t num_blinks = serial_comm.last_data_received_[0];
       uint8_t test_data[4] = {4,0,0,1};
+      behaviours.start_TEST_LED_PIN(num_blinks);
       serial_comm.SendMessage(TEST_LED_PIN_AND_RESPOND, test_data, 4);
-      flash_led(num_blinks);
     }
   }
+  
+  
+  behaviours.loop();
 
 }
 
-void flash_led(uint8_t num_blinks){
-  for (uint8_t i = 0; i < num_blinks; i++){
-    digitalWrite(led_pin, HIGH);
-    delay(100);
-    digitalWrite(led_pin,LOW);
-    delay(100);
-  }
-}
 
 // Code to read the Teensy ID
 void read_EE(uint8_t word, uint8_t *buf, uint8_t offset) {
