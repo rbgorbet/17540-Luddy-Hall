@@ -10,8 +10,9 @@
 #define AUDIO_STOP_RECORDING 0x03
 #define AUDIO_START_PLAYING 0x04
 #define AUDIO_STOP_PLAYING 0x05
+#define FADE_ACTUATOR_GROUP 0x06
 
-int frame_duration = 50; //milliseconds
+int frame_duration = 10; //milliseconds
 
 int led_pin = 13;
 
@@ -45,6 +46,25 @@ void loop() {
       uint8_t test_data[4] = {4,0,0,1};
       behaviours.start_TEST_LED_PIN(num_blinks);
       serial_comm.SendMessage(TEST_LED_PIN_AND_RESPOND, test_data, 4);
+    }
+
+    if (serial_comm.last_code_received_ == FADE_ACTUATOR_GROUP){
+      // each actuator takes 5 bytes to control
+      // <pin><start><end><time_hi><time_lo>
+      uint8_t num_actuators = serial_comm.last_data_length_/5;
+      uint8_t pins[num_actuators]; 
+      uint8_t start_values[num_actuators]; 
+      uint8_t end_values[num_actuators]; 
+      int fade_times[num_actuators];
+      for (int a = 0; a < serial_comm.last_data_length_ ; a = a + 5){
+        pins[a] = serial_comm.last_data_received_[a]; // first byte is pin
+        start_values[a] = serial_comm.last_data_received_[a+1]; // second byte is starting value
+        end_values[a] = serial_comm.last_data_received_[a+2]; // third byte is starting value
+        fade_times[a] = (serial_comm.last_data_received_[a+3] << 8) + serial_comm.last_data_received_[a+4]; 
+        // fourth byte is time hi, fifth byte is time lo
+        // fade time in milliseconds = (hi << 8) + lo
+      }
+      behaviours.start_FADE_ACTUATOR_GROUP(pins, start_values, end_values, fade_times, num_actuators);
     }
   }
   

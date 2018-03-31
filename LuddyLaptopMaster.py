@@ -22,12 +22,13 @@ from pythonosc import udp_client
 # instruction codes
 TEST_LED_PIN_AND_RESPOND = b'\x00'
 REQUEST_TEENSY_IDS = b'\x01'
+FADE_ACTUATOR_GROUP = b'\x06'
 
 connected_teensies = {} # connected_teensies[pi_addr] = [list of bytes objects, each element is byte sobjects for one teensy]
 received_connected_teensies = {} #received_connected_teensies[pi_addr] = True or False is we received connected Teensies
 
 #pi_ip_addresses = ['192.168.2.54', '192.168.2.24']
-pi_ip_addresses = ['192.168.2.54']
+pi_ip_addresses = ['192.168.2.25']
 
 pi_incoming_bytes_queue = {}
 for pi_addr in pi_ip_addresses:
@@ -146,7 +147,7 @@ def test_connected_teensies():
 
     # test connected Teensies
     SOM = b'\xff\xff'
-    length = b'\x01' # no data
+    length = b'\x01' # data is only number of blinks
     data = b'\x05' # blink 20 times
     EOM = b'\xfe\xfe'
     print("Sending TEST_LED_PIN_AND_RESPOND to all connected Teensies")
@@ -154,11 +155,37 @@ def test_connected_teensies():
         for teensy in connected_teensies[pi]:
             tid = teensy
             raw_bytes = SOM + tid + length + TEST_LED_PIN_AND_RESPOND + data + EOM
-            send_bytes(raw_bytes, pi) 
+            send_bytes(raw_bytes, pi)
+
+
+def send_fade_command(pin_list, start_list, end_list, time_list):
+
+    fade_time = 2000
+    fade_hi = (fade_time >> 8) & 255 # high byte
+    fade_lo = fade_time & 255 # low byte
+
+    # to recover: fade_time == (fade_hi << 8) + fade_lo
+
+    SOM = b'\xff\xff'
+    length = bytes([len(pin_list)*5])
+    data = b''
+    for a in range(len(pin_list)):
+        fade_hi =(time_list[a] >> 8) & 255 # high byte
+        fade_lo = time_list[a] & 255 # low byte
+        data = data + bytes([pin_list[a], start_list[a], end_list[a],fade_hi, fade_lo])
+    EOM = b'\xfe\xfe'
+    print("Sending FADE_ACTUATOR_GROUP to all connected Teensies")
+    for pi in pi_ip_addresses:
+        for teensy in connected_teensies[pi]:
+            tid = teensy
+            raw_bytes = SOM + tid + length + FADE_ACTUATOR_GROUP + data + EOM
+            send_bytes(raw_bytes, pi)
+    
     
 
 #main
-debug = False
+debug = True
+send_fade = False
 listening_thread = threading.Thread(target = receive_bytes)
 listening_thread.start()
 
@@ -166,6 +193,8 @@ time.sleep(1)
 # note: int.to_bytes(362262, byteorder = 'big', length = 3) = b'\x05\x87\x16'      
 
 request_connected_teensies()
+
+start_time = time.time()
 
 
 
@@ -203,6 +232,14 @@ while True:
 
         if debug and tested_teensies == False:
             tested_teensies = test_connected_teensies()
+
+        if time.time() - start_time > 5 and send_fade == True:
+            send_fade_command([13],[0],[50],[2000])
+            time.sleep(2)
+            send_fade_command([13],[50],[0],[2000])
+            send_fade = False
+            
+            
 
 
 
