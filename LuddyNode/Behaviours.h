@@ -48,6 +48,8 @@ class Behaviours{
 
     void loop();
 
+    void safe_write(uint8_t pin, uint8_t val);
+
 
 };
 

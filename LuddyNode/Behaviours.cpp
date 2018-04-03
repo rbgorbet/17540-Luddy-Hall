@@ -169,13 +169,13 @@ void Behaviours::_resume_FADE_ACTUATOR_GROUP(){
       // fading up
       PWM_value = start_value + framecount/num_frames_to_skip;
       if (framecount % num_frames_to_skip == 0 && PWM_value <= end_value){
-        SoftPWMSet(pin, PWM_value);
+        safe_write(pin, PWM_value);
       }
     } else {
       // fading down
       PWM_value = start_value - framecount/num_frames_to_skip;
       if (framecount % num_frames_to_skip == 0 && PWM_value >= end_value){
-        SoftPWMSet(pin, PWM_value);
+        safe_write(pin, PWM_value);
       }
     }
   }
@@ -185,7 +185,7 @@ void Behaviours::_resume_FADE_ACTUATOR_GROUP(){
     _framecount[_behaviour_FADE_ACTUATOR_GROUP] = 0;
     // set each actuator to its ending value
     for (uint8_t a = 0; a < _num_actuators_FADE_ACTUATOR_GROUP; a++){
-      SoftPWMSet(_pins_FADE_ACTUATOR_GROUP[a],_end_values_FADE_ACTUATOR_GROUP[a]);
+      safe_write(_pins_FADE_ACTUATOR_GROUP[a],_end_values_FADE_ACTUATOR_GROUP[a]);
     }
   } else {
     _framecount[_behaviour_FADE_ACTUATOR_GROUP]++;
@@ -205,6 +205,12 @@ void Behaviours::loop(){
       _resume_FADE_ACTUATOR_GROUP();
     }
     current_millis = millis(); //I forgot this line, and forgot to set frame duration... worked as intended??
+  }
+}
+
+void Behaviours::safe_write(uint8_t pin, uint8_t val){
+  if (val < 76){
+    SoftPWMSet(pin,val);
   }
 }
 

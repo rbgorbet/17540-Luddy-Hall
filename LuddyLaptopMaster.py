@@ -28,7 +28,7 @@ connected_teensies = {} # connected_teensies[pi_addr] = [list of bytes objects, 
 received_connected_teensies = {} #received_connected_teensies[pi_addr] = True or False is we received connected Teensies
 
 #pi_ip_addresses = ['192.168.2.54', '192.168.2.24']
-pi_ip_addresses = ['192.168.2.25']
+pi_ip_addresses = ['192.168.1.177']
 
 pi_incoming_bytes_queue = {}
 for pi_addr in pi_ip_addresses:
@@ -95,6 +95,64 @@ def receive_all_OSC(addr):
     OSC_packet_queue.put(addr)
     print(addr)
 
+def parse_and_process_OSC(addr):
+    # expect messages to look like
+    # /4D/code/nodeidentifier/data1/data2/data3/.../dataN/
+
+    addr_list = addr.split('/')
+
+    # addr[0] will always be ''
+    source = addr_list[1]
+    code = addr_list[2]
+    node_ident = int(addr_list[3])
+
+    data = addr_list[4:]
+
+    print(source)
+    print(code)
+    print(node_ident)
+
+    if code == 'FADE_ACTUATOR_GROUP':
+
+        # data should look like
+        # [pin1,start1,end1,time1,pin2,start2,end2,time2,...,pinN,startN,endN,timeN]
+        num_actuators = len(data)/4
+        pin_list = []
+        start_list = []
+        end_list = []
+        time_list = []
+        for d in range(0, len(data),4):
+            pin_list.append(int(data[d]))
+            start_list.append(int(data[d+1]))
+            end_list.append(int(data[d+2]))
+            time_list.append(int(data[d+3]))
+
+
+        pi,teensy_bytes = find_pi_from_teensy_int_id(node_ident)
+
+        print("OSC: FADE_ACTUATOR_GROUP")
+
+        send_fade_command(pi,teensy_bytes, pin_list,start_list,end_list,time_list)
+
+
+def find_pi_from_teensy_int_id(int_id):
+    for pi in pi_ip_addresses:
+        for teensy in connected_teensies[pi]:
+            print("teensy: " + str(teensy))
+            print("int id: " + str(int_id))
+            
+            int_from_bytes = ((teensy[0] << 16) | (teensy[1] << 8)) | teensy[2]
+            print("bytes: " + str(int_from_bytes))
+            if int_from_bytes == int_id:
+                return pi,teensy
+            
+            
+            
+        
+    
+
+    
+
 dispatcher = dispatcher.Dispatcher()
 dispatcher.set_default_handler(receive_all_OSC)
 OSC_listener = osc_server.BlockingOSCUDPServer(('0.0.0.0', OSC_PORT_RECEIVE), dispatcher)
@@ -158,7 +216,7 @@ def test_connected_teensies():
             send_bytes(raw_bytes, pi)
 
 
-def send_fade_command(pin_list, start_list, end_list, time_list):
+def send_fade_command_to_all(pin_list, start_list, end_list, time_list):
 
     fade_time = 2000
     fade_hi = (fade_time >> 8) & 255 # high byte
@@ -180,6 +238,24 @@ def send_fade_command(pin_list, start_list, end_list, time_list):
             tid = teensy
             raw_bytes = SOM + tid + length + FADE_ACTUATOR_GROUP + data + EOM
             send_bytes(raw_bytes, pi)
+
+def send_fade_command(pi, tid, pin_list, start_list, end_list, time_list):
+
+
+    # to recover: fade_time == (fade_hi << 8) + fade_lo
+    print("here")
+
+    SOM = b'\xff\xff'
+    length = bytes([len(pin_list)*5])
+    data = b''
+    for a in range(len(pin_list)):
+        fade_hi =(time_list[a] >> 8) & 255 # high byte
+        fade_lo = time_list[a] & 255 # low byte
+        data = data + bytes([pin_list[a], start_list[a], end_list[a],fade_hi, fade_lo])
+    EOM = b'\xfe\xfe'
+    print("Sending FADE_ACTUATOR_GROUP to " + str(tid))
+    raw_bytes = SOM + tid + length + FADE_ACTUATOR_GROUP + data + EOM
+    send_bytes(raw_bytes, pi)
     
     
 
@@ -206,6 +282,9 @@ while True:
         print("Incoming OSC: " + incoming_OSC)
         if (incoming_OSC == "/4d/test"):
             test_connected_teensies()
+        else:
+            parse_and_process_OSC(incoming_OSC)
+            
     except queue.Empty:
         pass
 
@@ -234,9 +313,9 @@ while True:
             tested_teensies = test_connected_teensies()
 
         if time.time() - start_time > 5 and send_fade == True:
-            send_fade_command([13],[0],[50],[2000])
+            send_fade_command_to_all([13],[0],[50],[2000])
             time.sleep(2)
-            send_fade_command([13],[50],[0],[2000])
+            send_fade_command_to_all([13],[50],[0],[2000])
             send_fade = False
             
             

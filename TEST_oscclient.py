@@ -13,7 +13,13 @@ IP_MASTER = "192.168.2.22"
 
 if __name__ == "__main__":
 
-    client = udp_client.UDPClient("192.168.2.22", 3001)
-    msg = osc_message_builder.OscMessageBuilder(address = "/4d/test")
+    client = udp_client.UDPClient("192.168.1.8", 3001)
+    #msg = osc_message_builder.OscMessageBuilder(address = "/4d/test")
+    msg = osc_message_builder.OscMessageBuilder(address = "/4D/FADE_ACTUATOR_GROUP/362338/13/0/50/2000/14/0/50/2000")
+    msg = msg.build()
+    client.send(msg)
+
+    time.sleep(2)
+    msg = osc_message_builder.OscMessageBuilder(address = "/4D/FADE_ACTUATOR_GROUP/362338/13/50/0/2000/14/0/50/2000")
     msg = msg.build()
     client.send(msg)
