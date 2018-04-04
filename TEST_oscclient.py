@@ -1,7 +1,6 @@
-"""
-This program sends 10 random values between 0.0 and 1.0 to the /filter address,
-waiting for 1 seconds between each value.
-"""
+# Sends OSC commands to master laptop
+# pretends to be 4D laptop
+
 import random
 import time
 
