@@ -28,7 +28,7 @@ connected_teensies = {} # connected_teensies[pi_addr] = [list of bytes objects, 
 received_connected_teensies = {} #received_connected_teensies[pi_addr] = True or False is we received connected Teensies
 
 #pi_ip_addresses = ['192.168.2.54', '192.168.2.24']
-pi_ip_addresses = ['192.168.1.177']
+pi_ip_addresses = ['192.168.2.59']
 
 pi_incoming_bytes_queue = {}
 for pi_addr in pi_ip_addresses:
@@ -260,7 +260,7 @@ def send_fade_command(pi, tid, pin_list, start_list, end_list, time_list):
     
 
 #main
-debug = True
+debug = False
 send_fade = False
 listening_thread = threading.Thread(target = receive_bytes)
 listening_thread.start()
