@@ -19,9 +19,10 @@ class Behaviours{
 
     // behaviours
     // when possible, matches #defined message codes
-    const static uint8_t num_behaviours = 2;
+    const static uint8_t num_behaviours = 3;
     const uint8_t _behaviour_TEST_LED_PIN = 0; // modifier: num_blinks, function: blinks led pin with 100 ms between on and off
     const uint8_t _behaviour_FADE_ACTUATOR_GROUP = 1;
+    const uint8_t _behaviour_IR_SENSING = 2;
 
     // behaviour state variables
     bool _behaviour_on[num_behaviours]; // whether on not the behaviour is currently running
@@ -44,6 +45,18 @@ class Behaviours{
     uint8_t _num_actuators_FADE_ACTUATOR_GROUP;
     void start_FADE_ACTUATOR_GROUP(uint8_t pins[], uint8_t start_values[], uint8_t end_values[], int fade_times[], uint8_t num_actuators);
     void _resume_FADE_ACTUATOR_GROUP();
+
+    // Behaviour 2: IR_SENSING
+    const static uint8_t IR_num_sensors = 3;
+    uint8_t IR_pins[IR_num_sensors] = {A16,A17,A13};
+    int IR_vals[IR_num_sensors] = {0,0,0};
+    int IR_threshold = 800;
+    bool IR_triggered[IR_num_sensors] = {false,false,false};
+    long IR_last_trigger_time[IR_num_sensors] = {0,0,0};
+    void start_IR_SENSING();
+    void _resume_IR_SENSING();
+
+    
     
 
     void loop();

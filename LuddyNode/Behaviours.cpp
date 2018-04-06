@@ -195,6 +195,24 @@ void Behaviours::_resume_FADE_ACTUATOR_GROUP(){
   
 }
 
+void Behaviours::start_IR_SENSING(){
+  _behaviour_on[_behaviour_IR_SENSING] = true;
+  _framecount[_behaviour_IR_SENSING] = 0;
+
+  _behaviour_max_frames[_behaviour_IR_SENSING] = 0;
+}
+
+void Behaviours::_resume_IR_SENSING(){
+  for (uint8_t sensor = 0; sensor < IR_num_sensors; sensor++){
+    uint8_t IR_val = analogRead(IR_pins[sensor]);
+    IR_vals[sensor] = IR_val;
+    if (IR_val > IR_threshold){
+      IR_triggered[sensor] = true;
+      IR_last_trigger_time[sensor] = millis();
+    }
+  }
+}
+
 void Behaviours::loop(){
   elapsed_millis = millis() - current_millis;
   if (elapsed_millis >= frame_duration){
@@ -203,6 +221,9 @@ void Behaviours::loop(){
     }
     if (_behaviour_on[_behaviour_FADE_ACTUATOR_GROUP]){
       _resume_FADE_ACTUATOR_GROUP();
+    }
+    if (_behaviour_on[_behaviour_IR_SENSING]){
+      _resume_IR_SENSING();
     }
     current_millis = millis(); //I forgot this line, and forgot to set frame duration... worked as intended??
   }

@@ -11,6 +11,7 @@
 #define AUDIO_START_PLAYING 0x04
 #define AUDIO_STOP_PLAYING 0x05
 #define FADE_ACTUATOR_GROUP 0x06
+#define IR_TRIGGER 0x07
 
 int frame_duration = 10; //milliseconds
 
@@ -30,6 +31,8 @@ void setup() {
 
   pinMode(led_pin, OUTPUT);
   serial_comm.Register(my_id_bytes);
+
+  behaviours.start_IR_SENSING();
   
 }
 
@@ -39,7 +42,17 @@ void loop() {
   // this loops starts running after the node registers
   
   //digitalWrite(led_pin, HIGH);
-  
+
+  // check for IR triggers, send message back to Pi when triggered
+  for (uint8_t ir = 0; ir < behaviours.IR_num_sensors; ir++){
+    if (behaviours.IR_triggered[ir]){
+      uint8_t ir_num[1] = {ir}; 
+      serial_comm.SendMessage(IR_TRIGGER, ir_num, 1);
+      behaviours.IR_triggered[ir] = false;
+    }
+  }
+
+  // check for incoming serial messages and act upon them
   if (serial_comm.CheckMessage()){ // returns 1 if message found, 0 otherwise
     if (serial_comm.last_code_received_ == TEST_LED_PIN_AND_RESPOND){
       uint8_t num_blinks = serial_comm.last_data_received_[0];
