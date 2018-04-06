@@ -25,7 +25,7 @@ def handle_REQUEST_TEENSY_IDS():
     raw_bytes = SOM + tid + length + REQUEST_TEENSY_IDS + data_bytes + EOM
     UDP_manager.send_bytes(raw_bytes)
 
-IP_LAPTOP = '192.168.2.22' #IP address of master laptop
+IP_LAPTOP = '192.168.2.22' # CHANGE THIS TO IP OF MASTER LAPTOP
 PORT_RECEIVE = 4001 # receive input on this port
 PORT_SEND = 4000 # send output on this port
 

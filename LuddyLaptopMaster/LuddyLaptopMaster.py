@@ -6,6 +6,12 @@
 # Reads and writes OSC messages to the 4DSOUND laptop
 # Coordinates global behaviour
 
+
+
+# CHANGE THESE IP ADDRESSES
+IP_4D_LAPTOP = '0.0.0.0'
+pi_ip_addresses = ['192.168.1.177']
+
 import socket
 import threading
 import time
@@ -32,8 +38,6 @@ IR_TRIGGER = b'\x07'
 
 connected_teensies = {} # connected_teensies[pi_addr] = [list of bytes objects, each element is byte sobjects for one teensy]
 received_connected_teensies = {} #received_connected_teensies[pi_addr] = True or False if we received connected Teensies
-
-pi_ip_addresses = ['192.168.1.177']
 
 pi_incoming_bytes_queue = {}
 for pi_addr in pi_ip_addresses:
@@ -89,7 +93,6 @@ def decode_bytes(raw_bytes):
     return code, data, tid
 
 # OSC Initialization
-IP_4D_LAPTOP = '0.0.0.0'
 OSC_packet_queue = queue.Queue()
 
 # Server
