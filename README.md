@@ -16,4 +16,4 @@ Code for Luddy Hall project
 
 1. Using TyCommander on the Raspberry Pi, upload the appropriate .hex file.
 2. In LuddyPiSlave.py modify `IP_LAPTOP` so that it matches the IP address of the master laptop. Copy the whole LuddyPiSlave folder to the Pi, and run `python3 LuddyPiSlave.py`.
-3. In LuddiLaptopMaster.py modify  `pi_ip_addresses = []` so that it contains a list of all Raspberry Pi IP addreses, modify `IP_4D_LAPTOP` so that it matches the IP address of the 4D Mac. Copy the whole LuddyLaptopMaster to the master laptop and run `LuddyLaptopMaster.py` with python3.
+3. In LuddyLaptopMaster.py modify  `pi_ip_addresses = []` so that it contains a list of all Raspberry Pi IP addreses, modify `IP_4D_LAPTOP` so that it matches the IP address of the 4D Mac. Copy the whole LuddyLaptopMaster to the master laptop and run `LuddyLaptopMaster.py` with python3.
